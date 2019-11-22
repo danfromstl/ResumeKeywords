@@ -1,0 +1,1097 @@
+Sub ExportTextX()
+
+  Dim oPres As Presentation
+  Dim oSlides As Slides
+  Dim oSld As Slide         'Slide Object
+  Dim oShp As Shape         'Shape Object
+  
+  Dim oLeadShp As Shape     'To store lead Shape Object on Slide
+  Dim LeadName As String
+  Dim LeadTitle As String
+  Dim LeadWrdArray() As String
+  
+  Dim iFile As Integer      'File handle for data output
+  iFile = FreeFile          'Get a free file number
+  
+  Dim jFile As Integer      'File handle for text output
+  jFile = FreeFile          'Get a free file number
+  
+  Dim GiantTextCollector As String
+  
+  Dim PathSep As String
+  Dim FileNum As Integer
+  Dim FileNum2 As Integer
+  Dim FileName As String
+  
+  Dim SlideCount As Integer
+  Dim ObjectCount As Integer
+  Dim ObjectEvaluationCount As Integer
+  Dim FieldEvaluationCount As Integer
+  Dim StringCleanerCount As Integer
+  Dim DictionaryCount As Integer
+  Dim lastMessageString As String
+  
+  Dim specialCaseStrip As String
+  Dim lastTempFullString As String
+  
+  Dim sTempString As String
+  Dim tempTxttt As String
+  Dim tempDict As Scripting.Dictionary
+  Dim personDictionary As Scripting.Dictionary
+
+
+  'Settings (Booleans and values)
+  Dim firstCellValOne As String
+  Dim firstCellValTwo As String
+    
+  Dim OutputWorkbook As Workbook
+  
+  
+  
+  #If Mac Then
+    PathSep = ":"
+  #Else
+    PathSep = "\"
+  #End If
+
+  Set oPres = ActivePresentation
+  Set oSlides = oPres.Slides
+
+  FileNum = FreeFile
+  FileNum2 = FreeFile
+  FileName = ActivePresentation.Name
+  
+  'Initiate all counters at 0
+  SlideCount = 0
+  ObjectCount = 0
+  ObjectEvaluationCount = 0
+  FieldEvaluationCount = 0
+  StringCleanerCount = 0
+  DictionaryCount = 0
+
+  'Open data output file
+  Open oPres.Path & PathSep & FileName & "_AllData.csv" For Output As FileNum
+  Print #iFile, "slideNum,objectType,name,title,dbsNum,compNum,empNum,sumNum,rel,freq,fulltext,searchLink,vVal"
+  
+  
+
+
+  
+'  Dim xlApp As Excel.Application
+'  Set xlApp = New Excel.Application
+'
+'  xlApp.Visible = True
+'
+'  Set OutputWorkbook = xlApp.Workbooks.Add
+'    With OutputWorkbook
+'        .Title = "First Book"
+'        .Subject = "Bingo"
+'        .SaveAs FileName:=oPres.Path & PathSep & "Book1.xlsx"
+'    End With
+'
+'  xlApp.Workbooks.Open "C:\lol\Book1.xlsx", True, False
+'
+'  Range("A8").Value = "Hello"
+
+  
+  'Set xlApp = Nothing
+  
+  
+'  'Open text output file
+'  Open oPres.Path & PathSep & FileName & "-AllText.txt" For Output As FileNum2
+'  Print #jFile, "All Client Plan Text- Very Lightly Processed"
+'  Print #jFile, "slide# | objectType | text "
+
+
+  'first line of Giant Text Collector String
+  GiantTextCollector = "All Client Plan Text- Very Lightly Processed"
+  'first template pattern for all future concatenations
+  GiantTextCollector = GiantTextCollector & vbCrLf & "slide# | objectType | text "
+  
+
+  For Each oSld In oSlides    'Loop thru each slide
+    
+    SlideCount = SlideCount + 1
+    
+    ' Include the slide number (the number that will appear in slide's
+    ' page number placeholder; you could also use SlideIndex
+    ' for the ordinal number of the slide in the file
+    
+    'Print #jFile, "Slide: " & CStr(oSld.SlideNumber) 'prints slide number at the top of each section
+    GiantTextCollector = GiantTextCollector & vbCrLf & vbCrLf & "Slide: " & CStr(oSld.SlideNumber)
+    
+    
+    
+    'look for highest table for heading node
+    For Each oShp In oSld.Shapes
+        If oShp.Type = msoTable And oShp.Top < 100 Then
+        
+            Set oLeadShp = oShp
+            
+            LeadWrdArray() = Split(oLeadShp.Table.Rows(1).Cells(1).Shape.TextFrame.TextRange.Text, vbCr)
+                For i = LBound(LeadWrdArray) To UBound(LeadWrdArray)
+                
+                    'increment Field evaluation counter
+                    FieldEvaluationCount = FieldEvaluationCount + 1
+                    
+                    'if this is the first line of the big text box
+                    If i = 0 Then
+                        'assign to Name
+                        LeadName = Replace(LeadWrdArray(i), vbVerticalTab, " | ")
+                    End If
+                    
+                    'if this is the second line of the bit text box
+                    If i = 1 Then
+                        'remove vertical tabs (replace with bars) and remove commas (replace with bars)
+                        LeadTitle = Replace(Replace(LeadWrdArray(i), vbVerticalTab, " | "), ",", " | ")
+                    End If
+                    
+                Next i
+            
+        End If
+    Next
+        
+    
+    
+    'Loop thru each shape on slide
+    For Each oShp In oSld.Shapes
+    
+      'increment Object evaluation counter
+      ObjectEvaluationCount = ObjectEvaluationCount + 1
+      
+      
+      'Check to see if shape has a text frame and text
+      If oShp.HasTextFrame And oShp.TextFrame.HasText Then
+        
+        'increment Field evaluation counter
+        FieldEvaluationCount = FieldEvaluationCount + 1
+        
+        Set personDictionary = CreateObject("Scripting.Dictionary")
+        personDictionary.Add "fullString", StripString(oShp.TextFrame.TextRange.Text)
+        
+        tempTxttt = StripString(oShp.TextFrame.TextRange.Text)
+        
+        If oShp.Type = msoPlaceholder Then
+            
+            Select Case oShp.PlaceholderFormat.Type
+                Case Is = ppPlaceholderTitle, ppPlaceholderCenterTitle
+                    'Print #jFile, CStr(oSld.SlideNumber) & " | title | " & tempTxttt
+                    GiantTextCollector = GiantTextCollector & vbCrLf & CStr(oSld.SlideNumber) & " | title" & vbTab & "|" & tempTxttt
+                Case Is = ppPlaceholderBody
+                    'Print #jFile, CStr(oSld.SlideNumber) & " | body | " & tempTxttt
+                    GiantTextCollector = GiantTextCollector & vbCrLf & CStr(oSld.SlideNumber) & " | body" & vbTab & "|" & tempTxttt
+                    
+                    'Add body name to field for reports-to retrieval?
+                    
+                    
+                Case Is = ppPlaceholderSubtitle
+                    'Print #jFile, CStr(oSld.SlideNumber) & " | subtitle | " & tempTxttt
+                    GiantTextCollector = GiantTextCollector & vbCrLf & CStr(oSld.SlideNumber) & " | subtitle" & vbTab & "|" & tempTxttt
+                Case Else
+                    'Print #jFile, CStr(oSld.SlideNumber) & " | other | " & tempTxttt
+                    GiantTextCollector = GiantTextCollector & vbCrLf & CStr(oSld.SlideNumber) & " | other" & vbTab & "|" & tempTxttt
+            End Select
+        Else
+            'Print #jFile, CStr(oSld.SlideNumber) & " | shape | " & tempTxttt
+            GiantTextCollector = GiantTextCollector & vbCrLf & CStr(oSld.SlideNumber) & " | shape" & vbTab & "|" & tempTxttt
+            
+        End If  ' msoPlaceholder
+        
+        
+        
+        
+      Else  ' it doesn't have a textframe - it might be a group that contains text so:
+      
+      
+      
+      
+      
+        '----------------------------------------------------------------------------------------------------------------
+        '----------------------------------------------------------------------------------------------------------------
+        '----GROUP SHAPE GROUP SHAPE GROUP SHAPE GROUP SHAPE GROUP SHAPE GROUP SHAPE GROUP SHAPE GROUP SHAPE GROUP-------
+        '----------------------------------------------------------------------------------------------------------------
+        '----------------------------------------------------------------------------------------------------------------
+        
+        If oShp.Type = msoGroup Then
+            
+            'increment Field evaluation counter
+            FieldEvaluationCount = FieldEvaluationCount + 1
+            
+            
+            '---BEGIN STRING METHOD FOR TEXT ONLY---
+            sTempString = TextFromGroupShape(oShp)
+            If Len(sTempString) > 0 Then
+
+                tempTxttt = sTempString
+
+                'Print #jFile, CStr(oSld.SlideNumber) & " | groupshape | " & tempTxttt
+                GiantTextCollector = GiantTextCollector & vbCrLf & CStr(oSld.SlideNumber) & " | groupshape" & vbTab & "" & tempTxttt
+                
+            End If
+            '---END STRING METHOD---
+        
+            
+            '-------------------------------------
+            'BEGIN DICTIONARY METHOD
+            '-------------------------------------
+            
+            Set personDictionary = CreateObject("Scripting.Dictionary")
+        
+            'sTempString = TextFromGroupShape(oShp)
+            Set tempDict = GroupShapeTextDict(oShp)
+            
+            'increment DictionaryCount
+            DictionaryCount = DictionaryCount + 1
+            
+            specialCaseStrip = tempDict("fullString")
+            lastTempFullString = StripLineBreaks(specialCaseStrip)
+            
+            orderedString = CStr(oSld.SlideNumber) & ",groupshape"
+            orderedString = orderedString & "," & Trim(tempDict("name"))
+            orderedString = orderedString & "," & Trim(tempDict("title"))
+            orderedString = orderedString & "," & Trim(tempDict("DBSconsultantNum"))
+            orderedString = orderedString & "," & Trim(tempDict("competitionNum"))
+            orderedString = orderedString & "," & Trim(tempDict("employeeNum"))
+            orderedString = orderedString & "," & Trim(tempDict("sumNum"))
+            orderedString = orderedString & "," & Trim(tempDict("relationship"))
+            orderedString = orderedString & "," & Trim(tempDict("frequency"))
+            
+            If Len(orderedString) > 30 Then
+                
+            orderedString = orderedString & "," & Trim(LeadName)
+            orderedString = orderedString & "," & Trim(LeadTitle)
+            orderedString = orderedString & "," & lastTempFullString
+                orderedString = orderedString & "," & Trim(tempDict("searchLink"))
+                'orderedString = orderedString & "," & oShp.Top
+                Print #iFile, orderedString
+                ObjectCount = ObjectCount + 1
+                
+            End If
+            
+            
+'            If tempDict.Exists("relationship") Then
+'                Print #iFile, CStr(oSld.SlideNumber) & ",groupshape," & "WE'VE GOT A RELATIONSHIP HARRY! It's: ," & tempDict("relationship")
+'            End If
+'            If tempDict.Exists("frequency") Then
+'                Print #iFile, CStr(oSld.SlideNumber) & ",groupshape," & "WE'VE GOT A FREQUENCY HARRY! It's: ," & tempDict("frequency")
+'            End If
+'            If tempDict.Exists("otherText") Then
+'                Print #iFile, CStr(oSld.SlideNumber) & ",groupshape," & "WE'VE GOT AN OTHERTEXT HARRY! It's: ," & tempDict("otherText")
+'            End If
+'            If tempDict.Exists("bigTextBlock") Then
+'                Print #iFile, CStr(oSld.SlideNumber) & ",groupshape," & "WE'VE GOT A BIG_TEXT_BLOCK HARRY! It's: ," & Trim(StripString(tempDict("bigTextBlock")))
+'            End If
+'            If tempDict.Exists("bigTextBlock") Then
+'                Print #iFile, CStr(oSld.SlideNumber) & ",groupshape," & "WE'VE GOT A NAME HARRY! It's: ," & Trim(tempDict("name"))
+'            End If
+'            If tempDict.Exists("bigTextBlock") Then
+'                Print #iFile, CStr(oSld.SlideNumber) & ",groupshape," & "WE'VE GOT A TITLE HARRY! It's: ," & Trim(tempDict("title"))
+'            End If
+'            If tempDict.Exists("bigTextBlock") Then
+'                Print #iFile, CStr(oSld.SlideNumber) & ",groupshape," & "WE'VE GOT A DBSCons# HARRY! It's: ," & Trim(tempDict("DBSconsultantNum"))
+'            End If
+'            If tempDict.Exists("bigTextBlock") Then
+'                Print #iFile, CStr(oSld.SlideNumber) & ",groupshape," & "WE'VE GOT A Competitor# HARRY! It's: ," & Trim(tempDict("competitionNum"))
+'            End If
+'            If tempDict.Exists("bigTextBlock") Then
+'                Print #iFile, CStr(oSld.SlideNumber) & ",groupshape," & "WE'VE GOT A Employee# HARRY! It's: ," & Trim(tempDict("employeeNum"))
+'            End If
+'            If tempDict.Exists("bigTextBlock") Then
+'                Print #iFile, CStr(oSld.SlideNumber) & ",groupshape," & "WE'VE GOT A Sum# HARRY! It's: ," & Trim(tempDict("sumNum"))
+'            End If
+'            If tempDict.Exists("fullString") Then
+'                Print #iFile, CStr(oSld.SlideNumber) & ",groupshape," & "WE'VE GOT A FULLSTRING HARRY! It's: ," & StripString(tempDict("fullString"))
+'            End If
+            
+            
+            '-------------------------------------
+            'END DICTIONARY METHOD
+            '-------------------------------------
+            
+            
+            
+        End If 'end msoGroup block
+        
+        '----------------------------------------------------------------------------------------------------------------
+        '----------------------------------------------------------------------------------------------------------------
+        '----TABLE TABLE TABLE TABLE TABLE TABLE TABLE TABLE TABLE TABLE TABLE TABLE TABLE TABLE TABLE TABLE TABLE-------
+        '----------------------------------------------------------------------------------------------------------------
+        '----------------------------------------------------------------------------------------------------------------
+        
+        
+        ' if instead, it's a table- run Dan's shiny new table parser
+        If oShp.Type = msoTable Then
+        
+             'increment Field evaluation counter
+             FieldEvaluationCount = FieldEvaluationCount + 1
+                   
+                   
+            '---BEGIN STRING METHOD FOR TEXT ONLY---
+            sTempString = TextFromTable(oShp)
+            If Len(sTempString) > 0 Then
+
+                tempTxttt = sTempString
+
+                'Print #jFile, CStr(oSld.SlideNumber) & " | table | " & tempTxttt
+                GiantTextCollector = GiantTextCollector & vbCrLf & CStr(oSld.SlideNumber) & " | table" & vbTab & "" & tempTxttt
+                
+            End If
+            '---END STRING METHOD---
+            
+            
+            
+            '-----------------------------
+            '---BEGIN DICTIONARY METHOD---
+            '-----------------------------
+            Set personDictionary = CreateObject("Scripting.Dictionary")
+            
+            Set tempDict = TextDictFromTable(oShp)
+            
+            'increment DictionaryCount
+            DictionaryCount = DictionaryCount + 1
+            
+            orderedString = CStr(oSld.SlideNumber) & ",table"
+            orderedString = orderedString & "," & Trim(tempDict("name"))
+            orderedString = orderedString & "," & Trim(tempDict("title"))
+            orderedString = orderedString & "," & Trim(tempDict("DBSconsultantNum"))
+            orderedString = orderedString & "," & Trim(tempDict("competitionNum"))
+            orderedString = orderedString & "," & Trim(tempDict("employeeNum"))
+            orderedString = orderedString & "," & Trim(tempDict("sumNum"))
+            orderedString = orderedString & "," & Trim(tempDict("relationship"))
+            orderedString = orderedString & "," & Trim(tempDict("frequency"))
+            
+            If Len(orderedString) > 30 Then
+            
+                orderedString = orderedString & "," & Trim(LeadName)
+                orderedString = orderedString & "," & Trim(LeadTitle)
+                orderedString = orderedString & "," & lastTempFullString
+                orderedString = orderedString & "," & StripLineBreaks(tempDict("fullString"))
+                orderedString = orderedString & "," & Trim(tempDict("searchLink"))
+                orderedString = orderedString & "," & oShp.Top
+                
+                Print #iFile, orderedString
+                ObjectCount = ObjectCount + 1
+            End If
+            
+            
+            
+            
+            
+'            If tempDict.Exists("relationship") Then
+'                Print #iFile, CStr(oSld.SlideNumber) & ",table," & "WE'VE GOT A RELATIONSHIP HARRY! It's: ," & tempDict("relationship")
+'            End If
+'            If tempDict.Exists("frequency") Then
+'                Print #iFile, CStr(oSld.SlideNumber) & ",table," & "WE'VE GOT A FREQUENCY HARRY! It's: ," & tempDict("frequency")
+'            End If
+'            If tempDict.Exists("otherText") Then
+'                Print #iFile, CStr(oSld.SlideNumber) & ",table," & "WE'VE GOT AN OTHERTEXT HARRY! It's: ," & tempDict("otherText")
+'            End If
+'            If tempDict.Exists("bigTextBlock") Then
+'                Print #iFile, CStr(oSld.SlideNumber) & ",table," & "WE'VE GOT A BIG_TEXT_BLOCK HARRY! It's: ," & StripString(tempDict("bigTextBlock"))
+'            End If
+'            If tempDict.Exists("bigTextBlock") Then
+'                Print #iFile, CStr(oSld.SlideNumber) & ",table," & "WE'VE GOT A NAME HARRY! It's: ," & StripString(tempDict("name"))
+'            End If
+'            If tempDict.Exists("bigTextBlock") Then
+'                Print #iFile, CStr(oSld.SlideNumber) & ",table," & "WE'VE GOT A TITLE HARRY! It's: ," & StripString(tempDict("title"))
+'            End If
+'            If tempDict.Exists("bigTextBlock") Then
+'                Print #iFile, CStr(oSld.SlideNumber) & ",table," & "WE'VE GOT A DBSCons# HARRY! It's: ," & StripString(tempDict("DBSconsultantNum"))
+'            End If
+'            If tempDict.Exists("bigTextBlock") Then
+'                Print #iFile, CStr(oSld.SlideNumber) & ",table," & "WE'VE GOT A Competitor# HARRY! It's: ," & StripString(tempDict("competitionNum"))
+'            End If
+'            If tempDict.Exists("bigTextBlock") Then
+'                Print #iFile, CStr(oSld.SlideNumber) & ",table," & "WE'VE GOT A Employee# HARRY! It's: ," & StripString(tempDict("employeeNum"))
+'            End If
+'            If tempDict.Exists("bigTextBlock") Then
+'                Print #iFile, CStr(oSld.SlideNumber) & ",table," & "WE'VE GOT A Sum# HARRY! It's: ," & StripString(tempDict("sumNum"))
+'            End If
+'            If tempDict.Exists("fullString") Then
+'                Print #iFile, CStr(oSld.SlideNumber) & ",table," & "WE'VE GOT A FULLSTRING HARRY! It's: ," & StripString(tempDict("fullString"))
+'            End If
+
+            
+            
+
+            
+            
+            
+            '-----------------------------
+            '---END DICTIONARY METHOD---
+            '-----------------------------
+            
+        End If
+      End If    ' Has text frame/Has text
+
+    Next oShp
+  Next oSld
+
+  'Close output file
+  Close #iFile
+  
+  
+  
+  'Open text output file
+  Open oPres.Path & PathSep & FileName & "_AllText.txt" For Output As FileNum2
+  Print #jFile, GiantTextCollector
+  Close #jFile
+  
+  
+  
+  lastMessageString = vbCr & "Client Plan Successfully Exported" & vbCr & vbCr & vbCr
+  lastMessageString = lastMessageString & "    " & SlideCount & " Slides Processed" & vbCr
+  lastMessageString = lastMessageString & "    " & ObjectEvaluationCount & " Objects Evaluated" & vbCr
+  lastMessageString = lastMessageString & "    " & FieldEvaluationCount & " Fields Evaluated" & vbCr
+  'lastMessageString = lastMessageString & "    " & StringCleanerCount & " Strings Processed or Cleaned" & vbCr
+  lastMessageString = lastMessageString & "    " & DictionaryCount & " Temporary Dictionaries Created" & vbCr & vbCr
+  lastMessageString = lastMessageString & "        Grand Total:" & vbCr
+  lastMessageString = lastMessageString & "        " & ObjectCount & " Objects Processed" & vbCr & vbCr & vbCr
+  lastMessageString = lastMessageString & "    Hooray!!"
+  lastMessageString = lastMessageString & vbCr & vbCr & vbCr & "DATA File located at: " & vbCr
+  lastMessageString = lastMessageString & oPres.Path & PathSep & FileName & "_AllData.csv"
+  lastMessageString = lastMessageString & vbCr & vbCr & "TEXT File located at: " & vbCr
+  lastMessageString = lastMessageString & oPres.Path & PathSep & FileName & "_AllText.txt"
+  lastMessageString = lastMessageString & vbCr & vbCr & "Search Links Added, Theoretically"
+  
+  Style = vbOKOnly + vbInformation + vbDefaultButton1
+  
+  Response = MsgBox(lastMessageString, Style, "Export Successful!!!")
+  
+  
+
+End Sub
+'-------------------------------------------------------------------------
+'---------------------------End ExportTextX-------------------------------
+'---------------------------End ExportTextX-------------------------------
+'---------------------------End ExportTextX-------------------------------
+'-------------------------------------------------------------------------
+
+
+
+
+
+'----------------------------------------------------------------------------------------------------------------
+'----------------------------------------------------------------------------------------------------------------
+'-------SUBROUTINES SUBROUTINES SUBROUTINES SUBROUTINES SUBROUTINES SUBROUTINES SUBROUTINES SUBROUTINES----------
+'----------------------------------------------------------------------------------------------------------------
+'----------------------------------------------------------------------------------------------------------------
+
+
+'-------------------------------------------------------------------------
+'---------------------------Begin StripString-----------------------------
+'---------------------------Begin StripString-----------------------------
+'---------------------------Begin StripString-----------------------------
+'-------------------------------------------------------------------------
+
+
+Function StripString(stringToStrip As String) As String
+    
+    'create a temporary string to work with
+    Dim strippedString As String
+    
+    'increment String Cleaner Count
+    StringCleanerCount = StringCleanerCount + 1
+    
+    'strip out VT charachter for dashes
+    strippedString = Replace(stringToStrip, vbVerticalTab, "- ")
+    
+    'strip out all other line breaks for commas
+    strippedString = Replace(strippedString, vbCrLf, ",")
+    strippedString = Replace(strippedString, vbLf, ",")
+    strippedString = Replace(strippedString, vbCr, ",")
+    
+    'return stripped string
+    StripString = strippedString
+    
+
+End Function
+
+
+'-----------------------------------------------------------------------------
+'---------------------------Begin StripLineBreaks-----------------------------
+'---------------------------Begin StripLineBreaks-----------------------------
+'---------------------------Begin StripLineBreaks-----------------------------
+'-----------------------------------------------------------------------------
+
+Function StripLineBreaks(stringToStrip As String) As String
+    
+    'create a temporary string to work with
+    Dim strippedString As String
+    
+    'increment String Cleaner Count
+    StringCleanerCount = StringCleanerCount + 1
+    
+    'strip out all line breaks for bars
+    strippedString = Replace(stringToStrip, vbVerticalTab, "|")
+    strippedString = Replace(strippedString, vbCrLf, "|")
+    strippedString = Replace(strippedString, vbLf, "|")
+    strippedString = Replace(strippedString, vbCr, "|")
+    strippedString = Replace(strippedString, ",", "|")
+    
+    'return stripped string
+    StripLineBreaks = strippedString
+    
+
+End Function
+
+
+'---------------------------------------------------------------------------------------------
+'---------------------------Begin TextFromGroupShape (old method)-----------------------------
+'---------------------------Begin TextFromGroupShape (old method)-----------------------------
+'---------------------------Begin TextFromGroupShape (old method)-----------------------------
+'---------------------------------------------------------------------------------------------
+
+
+Function TextFromGroupShape(oSh As Shape) As String
+' Returns the text from the shapes in a group
+' and recursively, text within shapes within groups within groups etc.
+
+    Dim oGpSh As Shape
+    Dim sTempText As String
+
+    If oSh.Type = msoGroup Then
+        For Each oGpSh In oSh.GroupItems
+            With oGpSh
+                If .Type = msoGroup Then
+                    sTempText = sTempText & "[" & TextFromGroupShape(oGpSh) & "]"
+                Else
+                    If .HasTextFrame Then
+                        If .TextFrame.HasText Then
+                            
+                            'increment Field evaluation counter
+                            FieldEvaluationCount = FieldEvaluationCount + 1
+                            
+                            'sTempText = sTempText & .TextFrame.TextRange.Text '(old concat method)
+                            sTempText = "|" & .TextFrame.TextRange.Text
+                            
+                        End If
+                    End If
+                End If
+            End With
+        Next
+    End If
+
+    TextFromGroupShape = StripLineBreaks(sTempText)
+
+NormalExit:
+    Exit Function
+
+ErrorHandler:
+    Resume Next
+
+End Function
+
+
+'----------------------------------------------------------------------------------------
+'---------------------------Begin TextFromTable (old method)-----------------------------
+'---------------------------Begin TextFromTable (old method)-----------------------------
+'---------------------------Begin TextFromTable (old method)-----------------------------
+'----------------------------------------------------------------------------------------
+
+
+Function TextFromTable(oSh As Shape) As String
+' Returns the text from the cells in the rows in a table
+
+    Dim oTbRs As Row
+    Dim oTbCls As Columns
+    Dim oTbCellRange As CellRange
+    Dim oTbCell As Cell
+    Dim sTempText As String
+    
+
+    If oSh.Type = msoTable Then
+        For Each oTbRs In oSh.Table.Rows
+            With oTbRs
+            
+                   'Ignore Status Legend Tables
+                   If .Cells(1).Shape.TextFrame.TextRange.Text = "Code" Then Exit For
+                        
+                   'AND Ignore Example Legend Table
+                   If .Cells(1).Shape.TextFrame.TextRange.Text Like "Name*" Then Exit For
+                   
+                   
+                   For Each oTbCell In oTbRs.Cells
+                        With oTbCell
+                    
+                            If .Shape.HasTextFrame Then
+                                
+                                If .Shape.TextFrame.HasText Then
+                                
+                                    'increment Field evaluation counter
+                                    FieldEvaluationCount = FieldEvaluationCount + 1
+                                    
+                                    sTempText = sTempText & "|" & .Shape.TextFrame.TextRange.Text
+                                    
+                                End If
+                            End If
+                        End With
+                        
+                   Next
+            End With
+        Next
+    End If
+
+    TextFromTable = StripLineBreaks(sTempText)
+
+NormalExit:
+    Exit Function
+
+ErrorHandler:
+    Resume Next
+
+End Function
+
+
+'--------------------------------------------------------------------------------
+'---------------------------Begin GroupShapeTextDict-----------------------------
+'---------------------------Begin GroupShapeTextDict-----------------------------
+'---------------------------Begin GroupShapeTextDict-----------------------------
+'--------------------------------------------------------------------------------
+
+
+Function GroupShapeTextDict(oSh As Shape) As Scripting.Dictionary
+' Returns the text from the shapes in a group
+' and recursively, text within shapes within groups within groups etc.
+
+    Dim oGpSh As Shape
+    Dim sTempText As String
+    Dim sTempFullString As String
+    
+    Dim objectDictionary As Scripting.Dictionary
+    Set objectDictionary = New Scripting.Dictionary
+    
+    Dim subTextDictionary As Scripting.Dictionary
+    Set subTextDictionary = New Scripting.Dictionary
+    
+    'increment DictionaryCount
+    DictionaryCount = DictionaryCount + 2
+
+    If oSh.Type = msoGroup Then
+        For Each oGpSh In oSh.GroupItems
+            With oGpSh
+                If .Type = msoGroup Then
+                    Set objectDictionary = GroupShapeTextDict(oGpSh)
+                    sTempFullString = sTempFullString & objectDictionary("fullString")
+                    
+                Else
+                    If .HasTextFrame Then
+                        If .TextFrame.HasText Then
+                        
+                            'increment Field evaluation counter
+                            FieldEvaluationCount = FieldEvaluationCount + 1
+            
+                            sTempText = .TextFrame.TextRange.Text
+
+                            objectDictionary.Item("fullString") = objectDictionary.Item("fullString") & "|" & sTempText
+                            
+                            'begin end < 5 LEN() relationship and frequency check
+                            If Len(.TextFrame.TextRange.Text) < 5 Then
+                                Select Case .TextFrame.TextRange.Text
+                                    Case Is = "TA", "FA", "NU", "UF", "TG"
+                                        objectDictionary.Item("relationship") = sTempText
+                                    Case Is = "MF", "< 3", "<3", "< 12", "> 12", ">12", "NE", "NT"
+                                        objectDictionary.Item("frequency") = sTempText
+                                    Case Else
+                                        objectDictionary.Item("otherText") = sTempText
+                                End Select
+                            End If 'end < 5 LEN() relationship and frequency check
+                            
+                            
+                            'begin end > 5 LEN() BigText Splitter
+                            If Len(.TextFrame.TextRange.Text) > 5 Then
+                                
+                                'split string here? maybe?
+                                objectDictionary.Item("bigTextBlock") = sTempText
+                                
+                                Set subTextDictionary = SplitStringToDictionary(sTempText)
+                                
+                                objectDictionary.Item("name") = subTextDictionary("name")
+                                objectDictionary.Item("title") = subTextDictionary("title")
+                                objectDictionary.Item("DBSconsultantNum") = subTextDictionary("DBSconsultantNum")
+                                objectDictionary.Item("competitionNum") = subTextDictionary("competitionNum")
+                                objectDictionary.Item("employeeNum") = subTextDictionary("employeeNum")
+                                objectDictionary.Item("sumNum") = subTextDictionary("sumNum")
+                                objectDictionary.Item("searchLink") = subTextDictionary("searchLink")
+                                
+                                
+                                                               
+'                                Select Case .TextFrame.TextRange.Text
+'                                    Case Is = "TA", "FA", "NU", "UF", "TG"
+'                                        objectDictionary.Item("relationship") = sTempText
+'                                    Case Is = "MF", "< 3", "<3", "< 12", "> 12", ">12", "NE", "NT"
+'                                        objectDictionary.Item("frequency") = sTempText
+'                                    Case Else
+'                                        objectDictionary.Item("otherText") = sTempText
+'                                End Select
+                            End If 'end > 5 LEN() BigText Splitter
+                            
+                            
+                            
+                        End If
+                    End If
+                End If
+            End With
+        Next
+    End If
+
+    Set GroupShapeTextDict = objectDictionary
+
+NormalExit:
+    Exit Function
+
+ErrorHandler:
+    Resume Next
+
+End Function
+
+
+
+'-------------------------------------------------------------------------------
+'---------------------------Begin TextDictFromTable-----------------------------
+'---------------------------Begin TextDictFromTable-----------------------------
+'---------------------------Begin TextDictFromTable-----------------------------
+'-------------------------------------------------------------------------------
+
+
+Function TextDictFromTable(oSh As Shape) As Scripting.Dictionary
+' Returns the text from the cells in the rows in a table
+
+    Dim oTbRs As Row
+    Dim oTbCls As Columns
+    Dim oTbCellRange As CellRange
+    Dim oTbCell As Cell
+    Dim sTempText As String
+    Dim sTempFullString As String
+    
+    Dim objectDictionary As Scripting.Dictionary
+    Set objectDictionary = New Scripting.Dictionary
+    
+    Dim subTextDictionary As Scripting.Dictionary
+    Set subTextDictionary = New Scripting.Dictionary
+    
+    'increment DictionaryCount
+    DictionaryCount = DictionaryCount + 2
+    
+
+    If oSh.Type = msoTable Then
+        For Each oTbRs In oSh.Table.Rows
+            With oTbRs
+                   If .Cells(1).Shape.TextFrame.TextRange.Text = "Code" Then Exit For
+                   If .Cells(1).Shape.TextFrame.TextRange.Text Like "Name*" Then Exit For
+                   
+                   'Place to exit for row index 1 (if I can figure out how to do it)
+                   'If .Cells Then Exit For
+                   
+                   For Each oTbCell In oTbRs.Cells
+                        With oTbCell
+                    
+                            If .Shape.HasTextFrame Then
+                                
+                                If .Shape.TextFrame.HasText Then
+                                    
+                                    'increment Field evaluation counter
+                                    FieldEvaluationCount = FieldEvaluationCount + 1
+                                    
+                                    sTempText = .Shape.TextFrame.TextRange.Text
+                                    
+                                    objectDictionary.Item("fullString") = objectDictionary.Item("fullString") & "|" & sTempText
+                            
+                                    'begin end < 5 LEN() relationship and frequency check
+                                    If Len(.Shape.TextFrame.TextRange.Text) < 5 Then
+                                        Select Case .Shape.TextFrame.TextRange.Text
+                                            Case Is = "TA", "FA", "NU", "UF", "TG"
+                                                objectDictionary.Item("relationship") = sTempText
+                                            Case Is = "MF", "< 3", "<3", "< 12", "> 12", ">12", "NE", "NT"
+                                                objectDictionary.Item("frequency") = sTempText
+                                            Case Else
+                                                objectDictionary.Item("otherText") = sTempText
+                                        End Select
+                                    End If 'end < 5 LEN() relationship and frequency check
+                                    
+                                    
+                                    'begin end > 5 LEN() BigText Splitter
+                                    If Len(.Shape.TextFrame.TextRange.Text) > 5 Then
+                                        
+                                        'split string here? maybe?
+                                        objectDictionary.Item("bigTextBlock") = sTempText
+                                        
+                                        Set subTextDictionary = SplitStringToDictionary(sTempText)
+                                        
+                                        objectDictionary.Item("name") = subTextDictionary("name")
+                                        objectDictionary.Item("title") = subTextDictionary("title")
+                                        objectDictionary.Item("DBSconsultantNum") = subTextDictionary("DBSconsultantNum")
+                                        objectDictionary.Item("competitionNum") = subTextDictionary("competitionNum")
+                                        objectDictionary.Item("employeeNum") = subTextDictionary("employeeNum")
+                                        objectDictionary.Item("sumNum") = subTextDictionary("sumNum")
+                                        objectDictionary.Item("searchLink") = subTextDictionary("searchLink")
+                                    
+                                    End If
+                                    
+                                    
+                                    
+                                    
+                                End If
+                            End If
+                        End With
+                        
+                   Next
+            End With
+        Next
+    End If
+
+    Set TextDictFromTable = objectDictionary
+
+NormalExit:
+    Exit Function
+
+ErrorHandler:
+    Resume Next
+
+End Function
+
+
+
+'----------------------------------------------------------------------------------
+'---------------------------Begin DanRunsStringTests()-----------------------------
+'---------------------------Begin DanRunsStringTests()-----------------------------
+'---------------------------Begin DanRunsStringTests()-----------------------------
+'----------------------------------------------------------------------------------
+
+
+
+Sub DanRunsStringTests()
+
+    Dim stringArray As String
+    Dim testString As String
+    Dim tempDict As Scripting.Dictionary
+    
+    testString = "Venkata Upamaka" & vbCr & "Operations" & vbCr & "9 / 147 / 28 / 184"
+ 
+    'MsgBox (testString)
+    
+    Set tempDict = SplitStringToDictionary(testString)
+    
+'    MsgBox "Passed back name field is: " & tempDict("name")
+'    MsgBox "Passed back title field is: " & tempDict("title")
+'    MsgBox "Passed back DBSCons# field is: " & tempDict("DBSconsultantNum")
+'    MsgBox "Passed back Competiton# field is: " & tempDict("competitionNum")
+'    MsgBox "Passed back Employee# field is: " & tempDict("employeeNum")
+'    MsgBox "Passed back Sum# field is: " & tempDict("sumNum")
+    
+    
+    
+    'MsgBox ("blerg")
+
+
+End Sub
+
+
+'-------------------------------------------------------------------------------------
+'---------------------------Begin SplitStringToDictionary-----------------------------
+'---------------------------Begin SplitStringToDictionary-----------------------------
+'---------------------------Begin SplitStringToDictionary-----------------------------
+'-------------------------------------------------------------------------------------
+
+
+Function SplitStringToDictionary(originalString As String) As Scripting.Dictionary
+
+    Dim arrayedString() As String
+    Dim SubString As String
+    Dim bigTextDict As Scripting.Dictionary
+    
+    Set bigTextDict = New Scripting.Dictionary
+    
+    'increment DictionaryCount
+    DictionaryCount = DictionaryCount + 1
+    
+    Dim WrdArray() As String
+    Dim DataArray() As String
+    Dim text_string As String
+    
+    text_string = "Welcome to Excel Trick"
+    WrdArray() = Split(originalString, vbCr)
+    For i = LBound(WrdArray) To UBound(WrdArray)
+    
+        'increment Field evaluation counter
+        FieldEvaluationCount = FieldEvaluationCount + 1
+        
+        strg = strg & vbNewLine & "Part No. " & i & " - " & WrdArray(i)
+        
+        'if this is the first line of the bit text box
+        If i = 0 Then
+            'assign to Name
+            bigTextDict("name") = Replace(WrdArray(i), vbVerticalTab, " | ") 'strippedString = Replace(stringToStrip, vbVerticalTab, "|")
+            
+            bigTextDict("searchLink") = "https://www.linkedin.com/search/results/people/?keywords=" & Replace(Replace(WrdArray(i), vbVerticalTab, " "), " ", "%20")
+            
+        End If
+        
+        'if this is the second line of the bit text box
+        If i = 1 Then
+            'remove vertical tabs and commas, then assign to Title
+            'remove vertical tabs (replace with bars) and remove commas (replace with bars)
+            bigTextDict("title") = Replace(Replace(WrdArray(i), vbVerticalTab, " | "), ",", " | ")
+            
+            'remove commas (replace with bars)
+            'bigTextDict("title") = Replace(bigTextDict("title"), ",", " | ")
+            
+        End If
+        
+        
+        'direct reports Data parser
+        If WrdArray(i) Like "*/*/*/*" Then
+            DataArray() = Split(WrdArray(i), "/")
+            'MsgBox ("there's some data in here!")
+                For j = LBound(DataArray) To UBound(DataArray)
+
+                    'increment Field evaluation counter
+                    FieldEvaluationCount = FieldEvaluationCount + 1
+
+                    'MsgBox DataArray(j)
+                    Select Case j
+                        Case Is = 0
+                            bigTextDict("DBSconsultantNum") = Trim(DataArray(j))
+                        Case Is = 1
+                            bigTextDict("competitionNum") = Trim(DataArray(j))
+                        Case Is = 2
+                            bigTextDict("employeeNum") = Trim(DataArray(j))
+                        Case Is = 3
+                            bigTextDict("sumNum") = Trim(DataArray(j))
+                        Case Else
+                            'MsgBox "Extra uncategorized data point"
+                    End Select
+                    
+                Next j
+        End If
+        
+        
+        
+    Next i
+    'MsgBox strg
+    
+    
+    Set SplitStringToDictionary = bigTextDict
+
+
+'        strippedString = Replace(stringToStrip, vbVerticalTab, "- ")
+'
+'    strip out all other line breaks for commas
+'    strippedString = Replace(strippedString, vbCrLf, ",")
+'    strippedString = Replace(strippedString, vbLf, ",")
+'    strippedString = Replace(strippedString, vbCr, ",")
+    
+
+End Function
+
+
+'-------------------------------------------------------------------------------------
+'---------------------------Begin String Splitting Examples---------------------------
+'---------------------------Begin String Splitting Examples---------------------------
+'---------------------------Begin String Splitting Examples---------------------------
+'-------------------------------------------------------------------------------------
+
+
+Sub Break_String()
+    Dim WrdString As String
+    Dim text_string As String
+    text_string = "Welcome to Excel Trick"
+    WrdString = Split(text_string)(2)
+    MsgBox "The third part is : " & WrdString
+End Sub
+
+
+Sub Break_String2()
+    Dim WrdArray() As String
+    Dim text_string As String
+    text_string = "Welcome to Excel Trick"
+    WrdArray() = Split(text_string)
+    For i = LBound(WrdArray) To UBound(WrdArray)
+      strg = strg & vbNewLine & "Part No. " & i & " - " & WrdArray(i)
+    Next i
+    MsgBox strg
+End Sub
+
+
+'-------------------------------------------------------------------------------------
+'---------------------------Begin Ribbon Add-In Code----------------------------------
+'---------------------------Begin Ribbon Add-In Code----------------------------------
+'---------------------------Begin Ribbon Add-In Code----------------------------------
+'-------------------------------------------------------------------------------------
+
+
+Sub Auto_Open()
+    Dim oToolbar As CommandBar
+    Dim oButton As CommandBarButton
+    Dim MyToolbar As String
+
+    ' Give the toolbar a name
+    MyToolbar = "Export Plan"
+
+    On Error Resume Next
+    ' so that it doesn't stop on the next line if the toolbar's already there
+
+    ' Create the toolbar; PowerPoint will error if it already exists
+    Set oToolbar = CommandBars.Add(Name:=MyToolbar, _
+        Position:=msoBarFloating, Temporary:=True)
+    If Err.Number <> 0 Then
+          ' The toolbar's already there, so we have nothing to do
+          Exit Sub
+    End If
+
+    On Error GoTo ErrorHandler
+
+    ' Now add a button to the new toolbar
+    Set oButton = oToolbar.Controls.Add(Type:=msoControlButton)
+
+    ' And set some of the button's properties
+
+    With oButton
+
+         .DescriptionText = "This button exports the entire presentation"
+          'Tooltip text when mouse if placed over button
+
+         .Caption = "Export Client Plan to .CSV file"
+         'Text if Text in Icon is chosen
+
+         .OnAction = "ExportTextX"
+          'Runs the Sub Button1() code when clicked
+
+         .Style = msoButtonIconAndCaptionBelow
+          ' Button displays as icon, not text or both
+
+         .FaceId = 8
+          ' chooses icon #8 from the available Office icons
+        
+
+    End With
+
+    ' Repeat the above for as many more buttons as you need to add
+    ' Be sure to change the .OnAction property at least for each new button
+
+    ' You can set the toolbar position and visibility here if you like
+    ' By default, it'll be visible when created. Position will be ignored in PPT 2007 and later
+    oToolbar.Top = 150
+    oToolbar.Left = 150
+    oToolbar.Visible = True
+
+NormalExit:
+    Exit Sub   ' so it doesn't go on to run the errorhandler code
+
+ErrorHandler:
+     'Just in case there is an error
+     MsgBox Err.Number & vbCrLf & Err.Description
+     Resume NormalExit:
+End Sub
+
+
+
+
+'Sub Button1()
+'' This code will run when you click Button 1 added above
+'' Add a similar subroutine for each additional button you create on the toolbar
+'    ' This is just some silly example code.
+'    ' You'd put your real working code here to do whatever
+'    ' it is that you want to do
+'    MsgBox "Will you PLEASE stop clicking me?  I have a headache already!"
+'End Sub
